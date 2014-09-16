@@ -35,8 +35,8 @@ If you use things in scripts/
 Examples
 --------
 
-	$ openmpi -np 2 ./fetching
+	$ mpirun -np 2 ./fetching
 
-	$ openmpi -np 2 ./fetching -py pyblasso
+	$ mpirun -np 2 ./fetching -py pyblasso
 
 
