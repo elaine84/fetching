@@ -29,7 +29,7 @@ import sys
 import numpy as np
 
 class Mixture:
-    def __init__(self, train_size=1000, seed=0):
+    def __init__(self, train_size=100000, seed=0, batch_size=1000):
         np.random.seed(0)
         self.seed = seed
         self.train_size_ = train_size
@@ -60,10 +60,11 @@ class Mixture:
             ind = (components == i)
             self.data[ind, :] = np.random.multivariate_normal(self.positions[i],
                                                               self.cov, int(ind.sum()))
-        self.train_size_ = train_size / 10000
+        self.batch_size_ = batch_size
+        self.num_batches_ = (train_size + 1) / batch_size
 
     def data_size(self):
-        return self.train_size_
+        return self.num_batches_
 
     def first_proposal(self):
         #return np.zeros((self.ncomponents, self.ndimensions))
@@ -83,15 +84,10 @@ class Mixture:
         return theta + jump
 
     def evaluate(self, theta, position):
-        """
-        datum = self.data[position].repeat(self.ncomponents).reshape(self.ncomponents, self.ndimensions).T
-        td = theta - datum
-        log_density = np.log(np.exp(-(td * td).sum(axis=1) / 2).sum())
-        return log_density
-        """
-        lp = np.zeros(10000)
+        batch = self.batch_size_
+        lp = np.zeros(batch)
         for i in range(self.ncomponents):
-            td = theta[i] - self.data[(position * 10000):((position + 1) * 10000)]
+            td = theta[i] - self.data[(position * batch):((position + 1) * batch)]
             lp += np.exp(-(td**2) / 2.).prod(axis=1)
         return np.log(lp).sum()
 
@@ -119,33 +115,32 @@ class Mixture:
             plt.ion()
             plt.figure(2)
             plt.clf()
-            plt.semilogx([1, self.train_size()], [0, 0], 'k-', linewidth=2)
+            plt.semilogx([1, self.data_size()], [0, 0], 'k-', linewidth=2)
 
         theta = self.first_proposal()
         log_theta_density = 0
-        for position in range(self.train_size()):
+        for position in range(self.data_size()):
             log_theta_density += self.evaluate(theta, position)
         accept = 0
         accept_vec = np.cast[int](np.random.rand(100) * 2)
         samples = np.zeros((nsteps, self.ncomponents * self.ndimensions))
+        ell = np.log(2.38**2 / len(theta))
         for i in range(1, nsteps + 1):
             seed = int(np.random.random() * 10**12)
             np.random.seed(seed)
             log_u = np.log(np.random.random())
-            mu = np.zeros(self.ndimensions)
-            cov = self.scale * np.diag(np.ones(self.ndimensions))
-            proposal = theta.copy()
-            proposal += np.random.multivariate_normal(mu, cov, self.ncomponents)
+            print 'ell', ell
+            proposal = self.next_proposal(theta, ell)
             log_proposal_density = 0
-            trace = np.zeros(self.train_size())
-            # perm = np.random.permutation(self.train_size())
-            for position in range(self.train_size()):
+            trace = np.zeros(self.data_size())
+            # perm = np.random.permutation(self.data_size())
+            for position in range(self.data_size()):
                 log_proposal_density += self.evaluate(proposal, position)
-                trace[position] = log_proposal_density / (position + 1) * self.train_size()
+                trace[position] = log_proposal_density / (position + 1) * self.data_size()
             if PLOT_TRACES:
                 plt.figure(2)
                 plt.semilogx(trace - log_theta_density - log_u, '-', alpha=0.2)
-                plt.axis([0, self.train_size(), -100000, 100000])
+                plt.axis([0, self.data_size(), -100000, 100000])
                 plt.draw()
             if (log_proposal_density - log_theta_density > log_u):
                 theta = proposal.copy()
@@ -153,9 +148,11 @@ class Mixture:
                 accept += 1
                 accept_vec[i % 100] = 1
                 print i, 'accept', log_theta_density, float(accept) / i, accept_vec.sum() / 100.
+                ell += 0.766 / np.sqrt(i)
             else:
                 accept_vec[i % 100] = 0
                 print i, 'reject', log_theta_density, float(accept) / i, accept_vec.sum() / 100.
+                ell += -0.234 / np.sqrt(i)
             samples[i-1] = theta.flatten()
 
         try:
@@ -185,7 +182,7 @@ class Mixture:
             plt.ylabel(y)
 
         figname = ('../results/%s-%s=%d-%s=%d-%d.png' %
-                    ('pymixture', 'd', self.train_size(), 'D', nsteps, time.time()))
+                    ('pymixture', 'd', self.data_size(), 'D', nsteps, time.time()))
         plt.savefig(figname)
         try:
             import os
@@ -194,18 +191,21 @@ class Mixture:
             pass
 
 def sampler(args):
-    train_size = 500000
+    train_size = 1000
+    batch_size = train_size / 100
     seed = 0
     a = dict([arg.split('=') for arg in args])
     if 'train_size' in a.keys():
         train_size = int(a['train_size'])
     if 'seed' in a.keys():
         seed = int(a['seed'])
-    return Mixture(train_size=train_size, seed=seed)
+    if 'batch_size' in a.keys():
+        batch_size = int(a['batch_size'])
+    return Mixture(train_size=train_size, seed=seed, batch_size=batch_size)
 
 if __name__ == '__main__':
-    nsteps = 10
-    PLOT_TRACES = True
+    nsteps = 1000
+    PLOT_TRACES = False
     args = sys.argv[1:]
     a = dict([arg.split('=') for arg in args])
     if 'nsteps' in a.keys():
