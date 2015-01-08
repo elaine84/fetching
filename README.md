@@ -16,7 +16,7 @@ Elaine Angelino. Accelerating Markov chain Monte Carlo via parallel predictive p
 Cloning
 -------
 
-	$ git clone git@github.com:elaine84/repulsive.git
+	$ git clone git@github.com:elaine84/fetching.git
 
 
 If you are using MacPorts
